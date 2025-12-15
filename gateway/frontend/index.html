@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetSentry // Traffic Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+        
+        body {
+            font-family: 'Share Tech Mono', monospace;
+            background-color: #050505;
+            color: #00ff41;
+            overflow: hidden;
+        }
+
+        .scan-line {
+            width: 100%;
+            height: 100px;
+            z-index: 10;
+            background: linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(0, 255, 65, 0.04) 50%, rgba(0,0,0,0) 100%);
+            opacity: 0.1;
+            position: absolute;
+            bottom: 100%;
+            animation: scanline 10s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes scanline {
+            0% { bottom: 100%; }
+            100% { bottom: -100px; }
+        }
+
+        .cyber-box {
+            border: 1px solid #003b00;
+            box-shadow: 0 0 10px rgba(0, 255, 65, 0.1);
+            background: rgba(0, 20, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .cyber-header {
+            border-bottom: 1px solid #00ff41;
+            box-shadow: 0 4px 4px -2px rgba(0, 255, 65, 0.2);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #001000; }
+        ::-webkit-scrollbar-thumb { background: #003b00; }
+        ::-webkit-scrollbar-thumb:hover { background: #00ff41; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <div class="scan-line"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const App = () => {
+            const [packets, setPackets] = useState([]);
+            const [stats, setStats] = useState({ total: 0, http: 0, icmp: 0 });
+            const [status, setStatus] = useState("DISCONNECTED");
+            const wsRef = useRef(null);
+            const messagesEndRef = useRef(null);
+
+            const connectWebSocket = () => {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws`;
+                
+                const ws = new WebSocket(wsUrl);
+                wsRef.current = ws;
+
+                ws.onopen = () => setStatus("CONNECTED");
+                ws.onclose = () => {
+                    setStatus("DISCONNECTED");
+                    setTimeout(connectWebSocket, 3000);
+                };
+                ws.onmessage = (event) => {
+                    const pkt = JSON.parse(event.data);
+                    setPackets(prev => [pkt, ...prev].slice(0, 100)); // Keep last 100
+                    setStats(prev => ({
+                        total: prev.total + 1,
+                        http: pkt.protocol === 'HTTP' ? prev.http + 1 : prev.http,
+                        icmp: pkt.protocol === 'ICMP' ? prev.icmp + 1 : prev.icmp
+                    }));
+                };
+            };
+
+            useEffect(() => {
+                connectWebSocket();
+                return () => wsRef.current?.close();
+            }, []);
+
+            return (
+                <div className="h-screen w-screen flex flex-col p-4 space-y-4">
+                    {/* Header */}
+                    <div className="flex justify-between items-center p-4 cyber-box cyber-header">
+                        <h1 className="text-3xl font-bold tracking-[0.2em] text-green-400 drop-shadow-[0_0_10px_rgba(0,255,65,0.8)]">
+                            NET_SENTRY <span className="text-xs align-top opacity-70">v1.0</span>
+                        </h1>
+                        <div className={`text-sm px-2 py-1 border ${status === 'CONNECTED' ? 'border-green-500 text-green-500' : 'border-red-500 text-red-500'}`}>
+                            SYSTEM STATUS: {status}
+                        </div>
+                    </div>
+
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-3 gap-4 h-24">
+                        <StatBox label="TOTAL PACKETS" value={stats.total} />
+                        <StatBox label="HTTP TRAFFIC" value={stats.http} />
+                        <StatBox label="ICMP PINGS" value={stats.icmp} />
+                    </div>
+
+                    {/* Live Feed */}
+                    <div className="flex-1 cyber-box p-4 overflow-hidden flex flex-col">
+                        <h2 className="text-xl mb-4 border-b border-green-900 pb-2">LIVE TRAFFIC FEED</h2>
+                        <div className="flex-1 overflow-y-auto space-y-2 font-mono text-sm">
+                            {packets.map((pkt, i) => (
+                                <div key={i} className="flex space-x-4 p-2 hover:bg-green-900/30 transition-colors border-l-2 border-transparent hover:border-green-500">
+                                    <span className="text-gray-500 w-24">[{new Date().toLocaleTimeString()}]</span>
+                                    <span className={`w-16 font-bold ${pkt.protocol === 'HTTP' ? 'text-blue-400' : 'text-yellow-400'}`}>{pkt.protocol}</span>
+                                    <span className="text-gray-400 w-32">{pkt.src_ip} &rarr; {pkt.dst_ip}</span>
+                                    <span className="text-white truncate flex-1 opacity-80">{pkt.payload}</span>
+                                </div>
+                            ))}
+                            {packets.length === 0 && (
+                                <div className="text-center text-gray-600 mt-20 animate-pulse">
+                                    AWAITING DATA STREAM...
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const StatBox = ({ label, value }) => (
+            <div className="cyber-box flex flex-col justify-center items-center relative overflow-hidden group">
+                <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-green-500"></div>
+                <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-green-500"></div>
+                <span className="text-xs text-green-700 mb-1">{label}</span>
+                <span className="text-4xl font-bold text-green-400 drop-shadow-[0_0_5px_rgba(0,255,65,0.8)]">
+                    {value}
+                </span>
+            </div>
+        );
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
