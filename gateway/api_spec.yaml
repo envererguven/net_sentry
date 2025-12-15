@@ -1,0 +1,42 @@
+openapi: 3.0.0
+info:
+  title: NetSentry Gateway API
+  description: API for network traffic monitoring gateway.
+  version: 1.0.0
+paths:
+  /api/history:
+    get:
+      summary: Get packet capture history
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: List of packets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    src_ip:
+                      type: string
+                    dst_ip:
+                      type: string
+                    protocol:
+                      type: string
+                    payload:
+                      type: string
+  /ws:
+    get:
+      summary: WebSocket for real-time packet feed
+      description: Connect to receiving streaming packet data.
+      responses:
+        '101':
+          description: Switching Protocols
