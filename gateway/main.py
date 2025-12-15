@@ -24,33 +24,22 @@ async def read_index():
 
 # Background Sniffer Thread
 def run_sniffer_thread():
-    # Loop needs to be set for the thread if we want to verify async queue interactions, 
-    # but here we rely on the main loop passing the reference or just thread-safe queue usage.
-    # Note: asyncio.get_event_loop() inside a thread might be tricky.
-    # For now, we will assume packet_queue interactions in sniffer.py handle the "push" correctly 
-    # IF the loop is global. 
-    # Actually, sharing asyncio.Queue across threads is not thread-safe.
-    # We should use a threading.Queue and bridge it, or better:
-    # Use `sniff(..., started_callback=...)` and careful loop handling.
-    # SIMPLIFICATION: We will use a threading.Queue in sniffer.py instead of asyncio.Queue, 
-    # and then have a background task in FastAPI that polls `threading_queue` and puts into `asyncio_queue`.
     try:
+        # Give DB a moment to init if thread starts super fast (redundant with startup event but safe)
+        import time
+        time.sleep(2)
         start_sniffer(interface="eth0")
     except Exception as e:
         print(f"Sniffer crashed: {e}")
 
-# IMPORTANT: Fix for Queue sharing (Patching the logic safely)
 import queue
 packet_thread_queue = queue.Queue()
 
-# Monkey-patch sniffer's callback to use thread queue if needed, or just import it 
-# Let's re-define the callback logic here or ensure sniffer puts to this queue.
-# Ideally, we pass this queue to the sniffer.
-# For the sake of this file content, we'll assume `sniffer.py` is doing its best, 
-# but let's make sure we have a robust bridge.
-
 @app.on_event("startup")
 async def startup_event():
+    # Initialize DB explicitly on startup
+    init_db()
+    
     # Start the sniffer in a background thread
     t = threading.Thread(target=run_sniffer_thread, daemon=True)
     t.start()
