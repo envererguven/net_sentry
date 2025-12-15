@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  gateway:
+    build: ./gateway
+    container_name: net_sentry_gateway
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "8000:8000"
+    networks:
+      net_client_gateway:
+        ipv4_address: 172.20.0.10
+      net_gateway_server:
+        ipv4_address: 172.21.0.10
+    volumes:
+      - gateway_data:/app/data
+
+  server:
+    build: ./server
+    container_name: net_sentry_server
+    expose:
+      - "80"
+    networks:
+      net_gateway_server:
+        ipv4_address: 172.21.0.11
+
+  client:
+    build: ./client
+    container_name: net_sentry_client
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - TARGET_IP=172.21.0.11
+      - GATEWAY_IP=172.20.0.10
+    depends_on:
+      - gateway
+      - server
+    networks:
+      net_client_gateway:
+        ipv4_address: 172.20.0.11
+
+networks:
+  net_client_gateway:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+  net_gateway_server:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/24
+
+volumes:
+  gateway_data:

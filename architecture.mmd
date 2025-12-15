@@ -1,0 +1,17 @@
+graph TD
+    subgraph Client System
+        C[Client (Traffic Gen)] -->|Ping/HTTP| G[Gateway]
+    end
+
+    subgraph Gateway System
+        G -->|Forward Traffic| S[Server]
+        G_Sniffer[Packet Sniffer] -.->|Monitor| G
+        G_API[Gateway API] -->|Read| DB[(Database)]
+        G_Sniffer -->|Write| DB
+        G_WS[WebSocket Server] -.->|Real-time Feed| UI[Web Dashboard]
+        UI -->|Fetch History| G_API
+    end
+
+    subgraph Target System
+        S[Server (Nginx/Python)]
+    end
